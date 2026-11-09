@@ -33,9 +33,13 @@ public class KeyService extends AccessibilityService
         implements WebServer.Handler, MqttClient.Listener, Sensors.Listener, Display.Listener {
     private static final int FIRST_KEY = 131; // KEYCODE_F1
     private static final long START = SystemClock.elapsedRealtime();
-    static final String VERSION = "1.2";
+    static final String VERSION = "1.3";
 
-    private final Handler main = new Handler(Looper.getMainLooper());
+    /** Main-Thread-Handler, der Fehler abfängt (siehe SafeHandler). */
+    private final Handler main = new SafeHandler();
+
+    /** Für den Watchdog: läuft der Dienst in diesem Prozess? */
+    static volatile boolean running;
     private final Runnable[] longTimers = new Runnable[Config.BUTTONS];
     private final boolean[] longFired = new boolean[Config.BUTTONS];
     private final boolean[] isDown = new boolean[Config.BUTTONS];
@@ -86,9 +90,15 @@ public class KeyService extends AccessibilityService
         sensors = new Sensors(this, main, this);
         display = new Display(main, this);
         web = new WebServer(getAssets(), config, this);
-        apply();
+        try {
+            apply();
+        } catch (RuntimeException e) {
+            Log.add("Fehler beim Anwenden der Konfiguration: " + e);
+        }
         registerReceiver(keyReceiver, new IntentFilter(SMATEK_KEY_ACTION), null, main);
         main.postDelayed(relayPoll, 3000);
+        running = true;
+        Watchdog.schedule(this);
         Log.add("WallKeys " + VERSION + " gestartet");
     }
 
@@ -226,9 +236,13 @@ public class KeyService extends AccessibilityService
      */
     @Override
     protected boolean onKeyEvent(android.view.KeyEvent e) {
-        int code = e.getKeyCode();
-        if ((code == 135 || code == 136) && e.getAction() == android.view.KeyEvent.ACTION_DOWN) {
-            sensors.setProximity(code == 135);
+        try {
+            int code = e.getKeyCode();
+            if ((code == 135 || code == 136) && e.getAction() == android.view.KeyEvent.ACTION_DOWN) {
+                sensors.setProximity(code == 135);
+            }
+        } catch (RuntimeException ex) {
+            Log.add("Fehler bei Näherung: " + ex);
         }
         return false; // nie verschlucken – Fully & Co. sehen alle Tasten weiterhin
     }
@@ -254,15 +268,18 @@ public class KeyService extends AccessibilityService
 
     /** Erkennt auch Änderungen von außen (z. B. durch die Shelly-App). */
     private void pollRelay() {
-        if (obj(cfg, "relay").optBoolean("enabled", true) && relay.available()) {
-            Boolean st = relay.get();
-            if (st != null && !st.equals(lastRelay)) {
-                if (lastRelay != null) Log.add("Relais von außen geändert: " + (st ? "EIN" : "AUS"));
-                lastRelay = st;
-                reportRelay(st, true);
+        try {
+            if (obj(cfg, "relay").optBoolean("enabled", true) && relay.available()) {
+                Boolean st = relay.get();
+                if (st != null && !st.equals(lastRelay)) {
+                    if (lastRelay != null) Log.add("Relais von außen geändert: " + (st ? "EIN" : "AUS"));
+                    lastRelay = st;
+                    reportRelay(st, true);
+                }
             }
+        } finally {
+            main.postDelayed(relayPoll, 2000);
         }
-        main.postDelayed(relayPoll, 2000);
     }
 
     private void reportRelay(boolean on, boolean knx) {
@@ -516,6 +533,7 @@ public class KeyService extends AccessibilityService
 
     @Override
     public void onDestroy() {
+        running = false;
         try {
             unregisterReceiver(keyReceiver);
         } catch (IllegalArgumentException ignored) {

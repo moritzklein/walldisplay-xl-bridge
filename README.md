@@ -123,7 +123,15 @@ adb shell settings put secure accessibility_enabled 1
 
 > ⚠️ Der erste Befehl **ersetzt** die Liste der aktiven Bedienungshilfen. Falls auf dem Display schon andere aktiv sind (prüfen mit `adb shell settings get secure enabled_accessibility_services`), alle durch `:` getrennt angeben, z. B. `andere.app/.Dienst:de.wallkeys/de.wallkeys.KeyService`.
 
-### 5. Prüfen
+### 5. Selbstheilung erlauben (empfohlen)
+
+Stürzt ein Bedienungshilfen-Dienst ab, bindet Android ihn **nicht automatisch neu**. Ohne Gegenmaßnahme wären Tasten und Webinterface bis zur manuellen Reaktivierung weg. Ein eingebauter Watchdog prüft deshalb alle 15 Minuten, ob WallKeys läuft, und aktiviert den Dienst bei Bedarf neu. Dafür braucht er einmalig diese Berechtigung:
+
+```bash
+adb shell pm grant de.wallkeys android.permission.WRITE_SECURE_SETTINGS
+```
+
+### 6. Prüfen
 
 ```bash
 adb shell "dumpsys accessibility | grep -A1 'Enabled services'"
@@ -297,6 +305,8 @@ src/de/wallkeys/
   Sensors.java      Temperatur, Feuchte, Licht, Näherung, CPU
   Display.java      Auto-Helligkeit & Standby
   Relay.java        Relais über sysfs
+  SafeHandler.java  Main-Thread-Handler, der Fehler abfängt statt den Dienst abstürzen zu lassen
+  Watchdog.java     Job, der den Dienst nach einem Absturz wieder aktiviert
   WebServer.java    eingebauter HTTP-Server für Webinterface und API
   Log.java          Protokoll für das Webinterface
 assets/index.html   Webinterface (ohne externe Abhängigkeiten)
@@ -326,7 +336,7 @@ Andere Modelle (Wall Display, Wall Display X2 …) nutzen teils andere Pfade. Re
 
 | Problem | Lösung |
 |---|---|
-| Webinterface nicht erreichbar | Dienst aktiv? (`dumpsys accessibility`, siehe Installation). Firewall TCP 8080? |
+| Webinterface nicht erreichbar | `adb shell "dumpsys accessibility \| grep -E 'Bound\|Crashed'"`. Steht WallKeys unter *Crashed services*, den Dienst mit den Befehlen aus Schritt 4 neu aktivieren (oder bis zu 15 min auf den Watchdog warten, falls Schritt 5 erledigt ist). Ursache: `adb logcat -b crash`. Firewall TCP 8080? |
 | Tasten lösen nichts aus | Protokoll im Webinterface prüfen. Mit `am broadcast …` (siehe oben) testen. Ist der Dienst nach einem Update noch aktiv? |
 | MQTT „getrennt“ | Broker-IP/Port, Zugangsdaten, Firewall TCP 1883. Fehlermeldung steht im Protokoll. |
 | KNX „Keine Antwort“ | Router-IP, UDP 3671 in der Firewall freigegeben? IP Secure aktiv? Alle Tunnel belegt? |

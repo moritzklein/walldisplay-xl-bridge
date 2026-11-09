@@ -92,7 +92,17 @@ public final class Sensors implements SensorEventListener {
         }
     }
 
+    /** Wiederholte Abfrage – plant sich auch nach einem Fehler sicher neu ein. */
     private void pollFiles() {
+        try {
+            pollFilesInner();
+        } finally {
+            handler.removeCallbacks(poll);
+            handler.postDelayed(poll, intervalSec * 1000L);
+        }
+    }
+
+    private void pollFilesInner() {
         Double t = readMilli(TH_DIR + "temp1_input");
         Double h = readMilli(TH_DIR + "humidity1_input");
         Double cpu = readMilli(CPU_TEMP);
@@ -123,12 +133,19 @@ public final class Sensors implements SensorEventListener {
             listener.onSensor("illuminance", fmt(((Number) lux).doubleValue(), 0));
             lastLuxTime = now;
         }
-        handler.removeCallbacks(poll);
-        handler.postDelayed(poll, intervalSec * 1000L);
     }
 
     @Override
     public void onSensorChanged(SensorEvent e) {
+        // Sensor-Events laufen nicht über den SafeHandler – Fehler hier selbst abfangen
+        try {
+            onSensorChangedInner(e);
+        } catch (RuntimeException ex) {
+            Log.add("Fehler im Lichtsensor: " + ex);
+        }
+    }
+
+    private void onSensorChangedInner(SensorEvent e) {
         if (e.values == null || e.values.length == 0) return;
         if (e.sensor.getType() == Sensor.TYPE_LIGHT) {
             double lux = Math.round(e.values[0]);

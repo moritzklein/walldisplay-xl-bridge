@@ -60,19 +60,28 @@ public final class MqttClient {
         return connected;
     }
 
-    public synchronized void configure(boolean enabled, String host, int port, String user, String pass,
-                                       String clientId, String baseTopic, int keepAlive) {
-        disconnect(true);
-        this.enabled = enabled && host != null && !host.trim().isEmpty();
-        this.host = host == null ? "" : host.trim();
-        this.port = port;
-        this.user = user == null ? "" : user;
-        this.pass = pass == null ? "" : pass;
-        this.clientId = (clientId == null || clientId.isEmpty()) ? "wallkeys" : clientId;
-        this.statusTopic = stripSlash(baseTopic) + "/status";
-        this.keepAlive = Math.max(5, keepAlive);
-        backoffSec = 0;
-        nextTry = 0;
+    /**
+     * Übernimmt neue Verbindungsdaten. Läuft im MQTT-Thread, weil das saubere Trennen
+     * Netzwerkzugriffe auslöst – im Main-Thread würde Android den Prozess beenden
+     * (NetworkOnMainThreadException).
+     */
+    public void configure(boolean enabled, String host, int port, String user, String pass,
+                          String clientId, String baseTopic, int keepAlive) {
+        exec.execute(() -> {
+            synchronized (MqttClient.this) {
+                disconnect(true);
+                this.enabled = enabled && host != null && !host.trim().isEmpty();
+                this.host = host == null ? "" : host.trim();
+                this.port = port;
+                this.user = user == null ? "" : user;
+                this.pass = pass == null ? "" : pass;
+                this.clientId = (clientId == null || clientId.isEmpty()) ? "wallkeys" : clientId;
+                this.statusTopic = stripSlash(baseTopic) + "/status";
+                this.keepAlive = Math.max(5, keepAlive);
+                backoffSec = 0;
+                nextTry = 0;
+            }
+        });
     }
 
     /** Veröffentlicht asynchron; ist die Verbindung weg, wird erst neu verbunden. */
@@ -116,7 +125,16 @@ public final class MqttClient {
     private long nextTry;
     private long lastPing;
 
-    private synchronized void tick() {
+    /** Wiederholte Aufgabe: eine Exception würde sie für immer stoppen – daher abfangen. */
+    private void tick() {
+        try {
+            tickInner();
+        } catch (RuntimeException e) {
+            Log.add("MQTT interner Fehler: " + e);
+        }
+    }
+
+    private synchronized void tickInner() {
         if (!enabled) return;
         long now = System.currentTimeMillis();
         if (!connected) {
@@ -195,7 +213,7 @@ public final class MqttClient {
             }
             Listener l = listener;
             if (l != null) exec.execute(l::onConnected);
-        } catch (IOException e) {
+        } catch (IOException | RuntimeException e) {
             Log.add("MQTT Verbindung zu " + host + ":" + port + " fehlgeschlagen: " + e.getMessage());
             disconnect(false);
             backoffSec = Math.min(60, Math.max(2, backoffSec * 2));

@@ -199,14 +199,17 @@ public final class Display {
 
     /** Falls Android oder eine andere App die Helligkeit überschreibt: alle 30 s wiederherstellen. */
     private void keepAliveTick() {
-        if (enabled && targetRaw >= 0) {
-            int raw = readRaw();
-            if (raw >= 0 && raw != targetRaw && !handler.hasCallbacks(fade)) {
-                currentRaw = raw;
-                handler.post(fade);
+        try {
+            if (enabled && targetRaw >= 0) {
+                int raw = readRaw();
+                if (raw >= 0 && raw != targetRaw && !handler.hasCallbacks(fade)) {
+                    currentRaw = raw;
+                    handler.post(fade);
+                }
             }
+        } finally {
+            handler.postDelayed(keepAlive, 30000);
         }
-        handler.postDelayed(keepAlive, 30000);
     }
 
     private void report() {
