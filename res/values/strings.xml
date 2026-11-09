@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="service_desc">Leitet die Hardware-Tasten F1-F4 des Wall Displays als MQTT-Nachricht und/oder Webhook weiter. Konfiguration per Webinterface auf Port 8080.</string>
+</resources>

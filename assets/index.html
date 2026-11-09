@@ -1,0 +1,356 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>WallKeys</title>
+<style>
+  :root {
+    --bg: #f4f5f7; --card: #fff; --fg: #1d2330; --muted: #677085; --line: #dde1e8;
+    --accent: #2563eb; --ok: #15803d; --bad: #b91c1c; --input: #fff;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #12151b; --card: #1b1f27; --fg: #e6e9ef; --muted: #98a1b3; --line: #2c323d;
+            --accent: #60a5fa; --ok: #4ade80; --bad: #f87171; --input: #12151b; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--fg); font: 15px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  header { display: flex; align-items: center; gap: 12px; padding: 14px 16px; border-bottom: 1px solid var(--line); background: var(--card); position: sticky; top: 0; z-index: 2; }
+  header h1 { font-size: 18px; margin: 0; flex: 1; }
+  .pill { font-size: 13px; padding: 3px 10px; border-radius: 999px; border: 1px solid var(--line); color: var(--muted); white-space: nowrap; }
+  .pill.ok { color: var(--ok); border-color: currentColor; }
+  .pill.bad { color: var(--bad); border-color: currentColor; }
+  main { max-width: 980px; margin: 0 auto; padding: 16px; display: grid; gap: 16px; }
+  section { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 16px; }
+  h2 { font-size: 15px; margin: 0 0 12px; }
+  h3 { font-size: 14px; margin: 14px 0 8px; color: var(--muted); font-weight: 600; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 10px 14px; }
+  label { display: grid; gap: 4px; font-size: 13px; color: var(--muted); }
+  label.check { display: flex; align-items: center; gap: 8px; color: var(--fg); font-size: 14px; }
+  input, select, textarea { font: inherit; color: var(--fg); background: var(--input); border: 1px solid var(--line); border-radius: 6px; padding: 7px 9px; width: 100%; min-width: 0; }
+  input[type=checkbox] { width: auto; }
+  textarea { min-height: 38px; resize: vertical; }
+  .btnrow { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  button { font: inherit; border: 1px solid var(--line); background: var(--card); color: var(--fg); padding: 7px 14px; border-radius: 6px; cursor: pointer; }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .key { border-top: 1px solid var(--line); padding: 10px 0; }
+  .key:first-of-type { border-top: 0; padding-top: 0; }
+  .key summary { cursor: pointer; font-weight: 600; padding: 4px 0; }
+  .key summary .hint { font-weight: 400; }
+  .ev { display: grid; grid-template-columns: repeat(auto-fit, minmax(270px, 1fr)); gap: 14px; margin-top: 10px; }
+  .grp { font-size: 11.5px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); border-top: 1px solid var(--line); padding-top: 8px; margin-top: 2px; }
+  .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px; }
+  .tile { border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; display: grid; gap: 2px; }
+  .tile span { font-size: 12.5px; color: var(--muted); }
+  .tile b { font-size: 24px; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .tile small { font-size: 12px; color: var(--muted); }
+  .mono { font-family: ui-monospace, Consolas, monospace; font-size: 13px; min-height: 58px; }
+  .evbox { border: 1px solid var(--line); border-radius: 8px; padding: 10px; display: grid; gap: 8px; }
+  .evbox b { font-size: 13px; }
+  .row2 { display: grid; grid-template-columns: 90px 1fr; gap: 8px; }
+  .hint { font-size: 12.5px; color: var(--muted); margin: 6px 0 0; }
+  code { font-size: 12.5px; background: var(--bg); padding: 1px 5px; border-radius: 4px; }
+  #log { font: 12.5px/1.5 ui-monospace, Consolas, monospace; background: var(--bg); border-radius: 6px; padding: 10px; max-height: 320px; overflow: auto; white-space: pre-wrap; word-break: break-word; margin: 0; }
+  #msg { font-size: 13px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>WallKeys</h1>
+  <span id="mqttState" class="pill">MQTT …</span>
+  <button class="primary" id="save">Speichern</button>
+</header>
+<main>
+  <section>
+    <div class="btnrow" style="justify-content:space-between;margin-bottom:12px">
+      <h2 style="margin:0">Live</h2>
+      <div class="btnrow">
+        <span class="hint" style="margin:0">Relais</span>
+        <span id="relayState" class="pill">–</span>
+        <button data-relay="on">Ein</button><button data-relay="off">Aus</button><button data-relay="toggle">Umschalten</button>
+      </div>
+    </div>
+    <div class="tiles">
+      <div class="tile"><span>Temperatur</span><b id="s_temperature">–</b><small>°C</small></div>
+      <div class="tile"><span>Luftfeuchte</span><b id="s_humidity">–</b><small>% rF</small></div>
+      <div class="tile"><span>Helligkeit</span><b id="s_illuminance">–</b><small>lx</small></div>
+      <div class="tile"><span>Näherung</span><b id="s_proximity">–</b><small>&nbsp;</small></div>
+      <div class="tile"><span>CPU</span><b id="s_cpu_temperature">–</b><small>°C</small></div>
+      <div class="tile"><span>Display</span><b id="d_brightness">–</b><small id="d_mode">&nbsp;</small></div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Tasten</h2>
+    <div id="keys"></div>
+    <p class="hint">Alle Felder sind optional und frei kombinierbar – leer bedeutet aus. „Test“ nutzt die <b>gespeicherte</b> Konfiguration.<br>
+      Platzhalter in MQTT/Webhook: <code>{button}</code> (1–4), <code>{name}</code>, <code>{event}</code> (short/long/release).
+      Zugangsdaten direkt in der URL, z. B. DoorBird: <code>http://user:pass@192.168.x.x/bha-api/open-door.cgi?r=1</code></p>
+  </section>
+
+  <section>
+    <h2>KNX</h2>
+    <div class="grid">
+      <label class="check"><input type="checkbox" data-k="knx.enabled"> KNX aktiv</label>
+      <label>Modus<select data-k="knx.mode"><option value="tunnel">Tunneling (Unicast, empfohlen)</option><option value="routing">Routing (Multicast)</option></select></label>
+      <label>Router / Schnittstelle (IP)<input data-k="knx.host" placeholder="192.168.1.20"></label>
+      <label>Port<input type="number" data-k="knx.port"></label>
+      <label>Timeout (ms)<input type="number" data-k="knx.timeoutMs"></label>
+      <label>Multicast-Adresse (Routing)<input data-k="knx.multicast"></label>
+      <label>Absenderadresse (Routing)<input data-k="knx.sourceAddr" placeholder="15.15.250"></label>
+    </div>
+    <details class="hint" style="margin-top:10px">
+      <summary>Telegramm-Syntax &amp; Datentypen</summary>
+      <p>Eine Zeile pro Telegramm: <code>Gruppenadresse DPT Wert</code> – Kommentare mit <code>#</code>. Mehrere Zeilen werden nacheinander gesendet.</p>
+      <ul>
+        <li><code>1/1/10 1.001 1</code> ein · <code>0</code> aus · <code>toggle 1/1/11</code> umschalten (liest Status-GA 1/1/11, sonst letzter gesendeter Wert)</li>
+        <li><code>1/2/10 3.007 +</code> heller · <code>-</code> dunkler · <code>stop</code> (Langdruck + Loslassen = Dimmen)</li>
+        <li><code>2/1/5 1.008 1</code> Jalousie ab · <code>1.007 1</code> Stopp/Lamelle</li>
+        <li><code>3/2/5 5.001 75</code> Prozent · <code>5.010 200</code> Rohwert 0–255</li>
+        <li><code>4/0/1 9.001 21.5</code> 2-Byte-Gleitkomma · <code>14.x</code> 4-Byte-Float</li>
+        <li><code>2/0/7 17.001 3</code> Szene 3 abrufen · <code>18.001 learn 3</code> Szene 3 speichern</li>
+        <li>weiter: <code>6.x 7.x 8.x 12.x 13.x</code> Zahlen · <code>16.000 Text</code> · <code>20.102 1</code> HVAC-Modus · <code>232.600 #FF8800</code> RGB</li>
+      </ul>
+      <p>Tunneling öffnet je Tastendruck kurz einen Tunnel (UDP 3671) und schließt ihn wieder – belegt also keinen Tunnel-Slot dauerhaft. KNX IP Secure wird nicht unterstützt.</p>
+    </details>
+  </section>
+
+  <section>
+    <h2>Sensoren</h2>
+    <div class="grid">
+      <label class="check"><input type="checkbox" data-k="sensors.enabled"> Sensoren aktiv</label>
+      <label>Sendeintervall (s)<input type="number" data-k="sensors.intervalSec"></label>
+      <label>Temperatur-Korrektur (K)<input type="number" step="0.1" data-float data-k="sensors.tempOffset"></label>
+      <label>Feuchte-Korrektur (%)<input type="number" step="1" data-float data-k="sensors.humOffset"></label>
+    </div>
+    <h3>KNX-Gruppenadressen (optional)</h3>
+    <div class="grid">
+      <label>Temperatur (DPT 9.001)<input data-k="sensors.knxTemperature" placeholder="5/0/1"></label>
+      <label>Luftfeuchte (DPT 9.007)<input data-k="sensors.knxHumidity" placeholder="5/0/2"></label>
+      <label>Helligkeit (DPT 9.004)<input data-k="sensors.knxIlluminance" placeholder="5/0/3"></label>
+      <label>Näherung (DPT 1.002, 1 = nah)<input data-k="sensors.knxProximity" placeholder="5/0/4"></label>
+    </div>
+    <p class="hint">MQTT (retained): <code><span class="bt">walldisplay</span>/sensor/temperature</code>, <code>/humidity</code>, <code>/illuminance</code>, <code>/proximity</code> (near/far), <code>/cpu_temperature</code>.
+      Messwerte werden im Intervall gesendet, Helligkeit zusätzlich bei deutlicher Änderung, Näherung sofort.
+      Die Korrektur gleicht die Eigenerwärmung des Displays aus (Shelly-Werkswert für das XL: −1,2 K) – am besten mit einem Referenzthermometer abgleichen.</p>
+  </section>
+
+  <section>
+    <h2>Relais</h2>
+    <div class="grid">
+      <label class="check"><input type="checkbox" data-k="relay.enabled"> Relais-Steuerung aktiv</label>
+      <label class="check"><input type="checkbox" data-k="relay.inverted"> Logik invertiert (XL: 0 = Ein)</label>
+      <label>sysfs-Pfad<input data-k="relay.path"></label>
+      <label>KNX Status-GA (DPT 1.001)<input data-k="relay.knxStatus" placeholder="5/1/1"></label>
+    </div>
+    <p class="hint">MQTT: Befehl an <code><span class="bt">walldisplay</span>/relay/set</code> mit <code>ON</code>, <code>OFF</code> oder <code>TOGGLE</code>; Zustand (retained) auf <code><span class="bt">walldisplay</span>/relay</code>.
+      Zusätzlich kann jede Taste das Relais direkt schalten – auch ohne Netzwerk.</p>
+  </section>
+
+  <section>
+    <h2>Display</h2>
+    <div class="grid">
+      <label class="check"><input type="checkbox" data-k="display.enabled"> Helligkeitssteuerung durch WallKeys</label>
+      <label class="check"><input type="checkbox" data-k="display.autoBrightness"> Automatische Helligkeit (Lichtsensor)</label>
+      <label class="check"><input type="checkbox" data-k="display.proximityWake"> Standby &amp; Aufwecken per Näherung</label>
+    </div>
+    <h3>Automatik</h3>
+    <div class="grid">
+      <label>Minimale Helligkeit (%)<input type="number" min="0" max="100" data-k="display.minBrightness"></label>
+      <label>… erreicht bei/unter (lx)<input type="number" min="1" data-k="display.luxLow"></label>
+      <label>Maximale Helligkeit (%)<input type="number" min="0" max="100" data-k="display.maxBrightness"></label>
+      <label>… erreicht bei/über (lx)<input type="number" min="2" data-k="display.luxHigh"></label>
+      <label>Feste Helligkeit ohne Automatik (%)<input type="number" min="0" max="100" data-k="display.manualBrightness"></label>
+    </div>
+    <h3>Standby</h3>
+    <div class="grid">
+      <label>Standby nach (s ohne Anwesenheit, 0 = nie)<input type="number" min="0" data-k="display.offAfterSec"></label>
+      <label>Helligkeit im Standby (%, 0 = aus)<input type="number" min="0" max="100" data-k="display.standbyBrightness"></label>
+      <label>sysfs-Pfad<input data-k="display.path"></label>
+    </div>
+    <p class="hint">Die Helligkeit folgt dem Licht logarithmisch zwischen den beiden Lux-Punkten und blendet weich über. Annäherung oder Tastendruck schaltet sofort auf volle Ziel-Helligkeit; verlässt man den Bereich, geht das Display nach der eingestellten Zeit in den Standby. Fully läuft dabei unverändert weiter – nur die Beleuchtung wird geregelt.<br>
+      MQTT: <code><span class="bt">walldisplay</span>/display/set</code> = <code>ON</code>/<code>OFF</code> · <code><span class="bt">walldisplay</span>/display/brightness/set</code> = <code>0…100</code> oder <code>auto</code> · Zustand auf <code>…/display</code> und <code>…/display/brightness</code>.</p>
+  </section>
+
+  <section>
+    <h2>MQTT</h2>
+    <div class="grid">
+      <label class="check"><input type="checkbox" data-k="mqtt.enabled"> MQTT aktiv</label>
+      <label class="check"><input type="checkbox" data-k="mqtt.publishDefault"> Standard-Topic senden</label>
+      <label class="check"><input type="checkbox" data-k="mqtt.retain"> Retain</label>
+    </div>
+    <div class="grid" style="margin-top:10px">
+      <label>Broker (IP/Host)<input data-k="mqtt.host" placeholder="192.168.1.10"></label>
+      <label>Port<input type="number" data-k="mqtt.port"></label>
+      <label>Benutzer<input data-k="mqtt.user" autocomplete="off"></label>
+      <label>Passwort<input type="password" data-k="mqtt.pass" autocomplete="new-password"></label>
+      <label>Client-ID<input data-k="mqtt.clientId"></label>
+      <label>Basis-Topic<input data-k="mqtt.baseTopic"></label>
+      <label>QoS<select data-k="mqtt.qos" data-num><option value="0">0</option><option value="1">1</option></select></label>
+      <label>Keepalive (s)<input type="number" data-k="mqtt.keepAlive"></label>
+    </div>
+    <p class="hint">Standard-Topic: <code><span class="bt">walldisplay</span>/button/1</code> … <code>/button/4</code> mit Payload <code>short</code>, <code>long</code> oder <code>release</code>.
+      Verfügbarkeit (retained, Last Will): <code><span class="bt">walldisplay</span>/status</code> = <code>online</code>/<code>offline</code>.</p>
+  </section>
+
+  <section>
+    <h2>HTTP</h2>
+    <div class="grid">
+      <label style="grid-column: 1 / -1">Globale URL (bei jedem Tastendruck, GET)<input data-k="http.globalUrl" placeholder="http://server/hook?taste={button}&amp;art={event}"></label>
+      <label>Timeout (ms)<input type="number" data-k="http.timeoutMs"></label>
+      <label class="check"><input type="checkbox" data-k="http.insecureTls"> Selbstsignierte HTTPS-Zertifikate akzeptieren</label>
+    </div>
+  </section>
+
+  <section>
+    <h2>Allgemein</h2>
+    <div class="grid">
+      <label>Langdruck ab (ms)<input type="number" data-k="longPressMs"></label>
+      <label>Webinterface-Port<input type="number" data-k="webPort"></label>
+      <label>Webinterface-Passwort (leer = keins)<input type="password" data-k="webPassword" autocomplete="new-password"></label>
+      <label class="check"><input type="checkbox" data-k="wakeScreen"> Bildschirm bei Tastendruck einschalten</label>
+    </div>
+    <p class="hint">Benutzername beim Passwortschutz ist beliebig. Nach Änderung des Ports ist das Webinterface unter dem neuen Port erreichbar.</p>
+  </section>
+
+  <section>
+    <div class="btnrow" style="justify-content:space-between">
+      <h2 style="margin:0">Protokoll</h2>
+      <span id="msg"></span>
+    </div>
+    <pre id="log" style="margin-top:10px"></pre>
+  </section>
+</main>
+
+<script>
+let cfg = null;
+const $ = (s, r = document) => r.querySelector(s);
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const getPath = (o, p) => p.split('.').reduce((a, k) => a == null ? a : a[k], o);
+function setPath(o, p, v) { const ks = p.split('.'); const last = ks.pop(); ks.reduce((a, k) => a[k], o)[last] = v; }
+
+function renderKeys() {
+  const ph = { short: '1/1/10 1.001 toggle 1/1/11', long: '1/2/10 3.007 +', release: '1/2/10 3.007 stop' };
+  const ev = (i, e, label) => `
+    <div class="evbox">
+      <div class="btnrow" style="justify-content:space-between"><b>${label}</b><button data-test="${i + 1}" data-ev="${e}">Test</button></div>
+      <div class="grp">KNX</div>
+      <label>Telegramme (eine Zeile je: GA DPT Wert)<textarea class="mono" data-k="buttons.${i}.${e}.knx" placeholder="${ph[e]}"></textarea></label>
+      <div class="grp">Relais (lokal)</div>
+      <label>Aktion<select data-k="buttons.${i}.${e}.relay"><option value="">–</option><option value="toggle">Umschalten</option><option value="on">Ein</option><option value="off">Aus</option></select></label>
+      <div class="grp">MQTT</div>
+      <label>Topic (zusätzlich zum Standard-Topic)<input data-k="buttons.${i}.${e}.mqttTopic" placeholder="licht/flur/set"></label>
+      <label>Payload (leer = ${e})<input data-k="buttons.${i}.${e}.mqttPayload"></label>
+      <div class="grp">Webhook</div>
+      <div class="row2">
+        <label>Methode<select data-k="buttons.${i}.${e}.httpMethod"><option>GET</option><option>POST</option><option>PUT</option></select></label>
+        <label>URL<input data-k="buttons.${i}.${e}.httpUrl" placeholder="http://…"></label>
+      </div>
+      <label>Body (bei POST/PUT)<textarea data-k="buttons.${i}.${e}.httpBody"></textarea></label>
+    </div>`;
+  $('#keys').innerHTML = cfg.buttons.map((b, i) => `
+    <details class="key" ${i === 0 ? 'open' : ''}>
+      <summary><span class="kname">${esc(b.name)}</span> <span class="hint">· F${i + 1} · ${summary(b)}</span></summary>
+      <label style="margin-top:10px;max-width:320px">Name<input data-k="buttons.${i}.name"></label>
+      <div class="ev">${ev(i, 'short', 'Kurzer Druck')}${ev(i, 'long', 'Langer Druck')}${ev(i, 'release', 'Loslassen nach Langdruck')}</div>
+    </details>`).join('');
+}
+
+function summary(b) {
+  const used = [];
+  for (const e of ['short', 'long', 'release']) {
+    const a = b[e] || {};
+    if ((a.knx || '').trim()) used.push('KNX');
+    if ((a.mqttTopic || '').trim()) used.push('MQTT');
+    if ((a.httpUrl || '').trim()) used.push('Webhook');
+  }
+  const u = [...new Set(used)];
+  return u.length ? u.join(' + ') : 'nur Standard-Topic';
+}
+
+function fill() {
+  document.querySelectorAll('[data-k]').forEach(el => {
+    const v = getPath(cfg, el.dataset.k);
+    if (el.type === 'checkbox') el.checked = !!v; else el.value = v ?? '';
+  });
+  document.querySelectorAll('.bt').forEach(s => s.textContent = cfg.mqtt.baseTopic || 'walldisplay');
+}
+
+function collect() {
+  const c = JSON.parse(JSON.stringify(cfg));
+  document.querySelectorAll('[data-k]').forEach(el => {
+    let v = el.type === 'checkbox' ? el.checked : el.value;
+    if ('float' in el.dataset) v = parseFloat(String(v).replace(',', '.')) || 0;
+    else if (el.type === 'number' || 'num' in el.dataset) v = parseInt(v, 10) || 0;
+    setPath(c, el.dataset.k, v);
+  });
+  return c;
+}
+
+function msg(t, ok = true) { const m = $('#msg'); m.textContent = t; m.style.color = ok ? 'var(--ok)' : 'var(--bad)'; }
+
+async function load() {
+  cfg = await (await fetch('/api/config')).json();
+  renderKeys(); fill();
+}
+
+async function save() {
+  const c = collect();
+  const r = await fetch('/api/config', { method: 'POST', body: JSON.stringify(c) });
+  const j = await r.json().catch(() => ({}));
+  if (r.ok && j.ok) {
+    msg('Gespeichert ✓');
+    if (c.webPort !== cfg.webPort) { setTimeout(() => location.port = c.webPort, 800); return; }
+    cfg = c; fill(); setTimeout(status, 1500);
+  } else msg('Fehler: ' + (j.error || r.status), false);
+}
+
+async function status() {
+  try {
+    const s = await (await fetch('/api/status')).json();
+    const p = $('#mqttState');
+    if (!cfg || !cfg.mqtt.enabled) { p.className = 'pill'; p.textContent = 'MQTT aus'; }
+    else if (s.mqttConnected) { p.className = 'pill ok'; p.textContent = 'MQTT verbunden'; }
+    else { p.className = 'pill bad'; p.textContent = 'MQTT getrennt'; }
+    $('#log').textContent = s.log.join('\n');
+    const sv = s.sensors || {};
+    const nf = (v, d) => typeof v === 'number' ? v.toLocaleString('de-DE', { minimumFractionDigits: d, maximumFractionDigits: d }) : '–';
+    $('#s_temperature').textContent = nf(sv.temperature, 1);
+    $('#s_humidity').textContent = nf(sv.humidity, 0);
+    $('#s_illuminance').textContent = nf(sv.illuminance, 0);
+    $('#s_cpu_temperature').textContent = nf(sv.cpu_temperature, 0);
+    $('#s_proximity').textContent = sv.proximity === 'near' ? 'nah' : sv.proximity === 'far' ? 'frei' : '–';
+    const d = s.display || {};
+    $('#d_brightness').textContent = typeof d.brightness === 'number' && d.brightness >= 0 ? d.brightness + ' %' : '–';
+    $('#d_mode').textContent = (d.active === false ? 'Standby · ' : '') + (d.mode || '');
+    const r = $('#relayState');
+    if (s.relay === true) { r.className = 'pill ok'; r.textContent = 'EIN'; }
+    else if (s.relay === false) { r.className = 'pill'; r.textContent = 'AUS'; }
+    else { r.className = 'pill bad'; r.textContent = 'n/v'; }
+  } catch (e) { /* Display evtl. kurz weg */ }
+}
+
+document.addEventListener('click', async e => {
+  const rb = e.target.closest('[data-relay]');
+  if (rb) {
+    const r = await fetch('/api/relay?cmd=' + rb.dataset.relay, { method: 'POST' });
+    const j = await r.json().catch(() => ({}));
+    msg(j.ok ? `Relais ${j.on ? 'EIN' : 'AUS'}` : 'Relais: ' + (j.error || r.status), !!j.ok);
+    status();
+    return;
+  }
+  const t = e.target.closest('[data-test]');
+  if (!t) return;
+  await fetch(`/api/test?b=${t.dataset.test}&e=${t.dataset.ev}`, { method: 'POST' });
+  const evn = { short: 'kurz', long: 'lang', release: 'losgelassen' }[t.dataset.ev];
+  msg(`Test Taste ${t.dataset.test} ${evn} ausgelöst (gespeicherte Konfiguration)`);
+  setTimeout(status, 700);
+});
+$('#save').addEventListener('click', save);
+document.addEventListener('keydown', e => { if ((e.ctrlKey || e.metaKey) && e.key === 's') { e.preventDefault(); save(); } });
+
+load().then(status);
+setInterval(status, 3000);
+</script>
+</body>
+</html>

@@ -1,0 +1,8 @@
+# Build-Ausgaben
+build/
+*.apk
+*.idsig
+
+# Signaturschlüssel – niemals veröffentlichen
+*.keystore
+*.jks
